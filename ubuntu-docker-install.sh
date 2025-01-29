@@ -43,9 +43,9 @@ validate_domain() {
     fi
 }
 
-# Función para validar token de Cloudflare
+# Función para validar token de Cloudflare (versión más permisiva)
 validate_cloudflare_token() {
-    if [[ $1 =~ ^eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$ ]]; then
+    if [[ $1 =~ ^eyJ[A-Za-z0-9_=-]*$ ]]; then
         return 0
     else
         return 1
@@ -84,7 +84,7 @@ while true; do
     if validate_cloudflare_token "$CLOUDFLARE_TOKEN"; then
         break
     else
-        print_error "Token inválido. Debe ser un token JWT válido."
+        print_error "Token inválido. Debe comenzar con 'eyJ'"
     fi
 done
 
