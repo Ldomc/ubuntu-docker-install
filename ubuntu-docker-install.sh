@@ -43,15 +43,6 @@ validate_domain() {
     fi
 }
 
-# Función para validar token de Cloudflare (versión más permisiva)
-validate_cloudflare_token() {
-    if [[ $1 =~ ^eyJ[A-Za-z0-9_=-]*$ ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Verificar si se está ejecutando como root
 if [ "$EUID" -ne 0 ]; then 
     print_error "Este script debe ejecutarse como root"
@@ -75,16 +66,6 @@ while true; do
         break
     else
         print_error "Dominio inválido. Por favor, intente nuevamente."
-    fi
-done
-
-# Solicitar token de Cloudflare
-while true; do
-    read -p "Ingrese el token de Cloudflare Tunnel: " CLOUDFLARE_TOKEN
-    if validate_cloudflare_token "$CLOUDFLARE_TOKEN"; then
-        break
-    else
-        print_error "Token inválido. Debe comenzar con 'eyJ'"
     fi
 done
 
@@ -127,9 +108,9 @@ if ! systemctl is-active --quiet docker; then
     exit 1
 fi
 
-# Crear red de Docker para Portainer y Cloudflare
+# Crear red de Docker para Portainer
 print_message "Creando red de Docker..."
-docker network create proxy_network
+docker network create portainer_network
 
 # Instalar Portainer
 print_message "Instalando Portainer..."
@@ -137,7 +118,7 @@ docker volume create portainer_data
 docker run -d \
     --name portainer \
     --restart=always \
-    --network proxy_network \
+    --network portainer_network \
     -p 8000:8000 \
     -p 9443:9443 \
     -v /var/run/docker.sock:/var/run/docker.sock \
@@ -150,62 +131,21 @@ if ! docker ps | grep -q portainer; then
     exit 1
 fi
 
-# Crear directorio para Cloudflare
-mkdir -p /opt/cloudflared
-cd /opt/cloudflared
-
-# Crear archivo docker-compose para Cloudflare Tunnel
-print_message "Configurando Cloudflare Tunnel..."
-cat > docker-compose.yml << EOL
-version: '3.8'
-services:
-  cloudflared:
-    container_name: cloudflared
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TOKEN}
-    networks:
-      - proxy_network
-
-networks:
-  proxy_network:
-    external: true
-EOL
-
-# Iniciar Cloudflare Tunnel
-print_message "Iniciando Cloudflare Tunnel..."
-docker compose up -d
-
-# Verificar que Cloudflare Tunnel está corriendo
-if ! docker ps | grep -q cloudflared; then
-    print_error "Error al iniciar Cloudflare Tunnel"
-    exit 1
-fi
-
 # Mostrar información final
 print_message "Instalación completada exitosamente!"
 echo -e "\nInformación importante:"
-echo "- Docker, Portainer y Cloudflare Tunnel han sido instalados"
-echo "- Portainer está disponible localmente en:"
+echo "- Docker y Portainer han sido instalados"
+echo "- Portainer está disponible en:"
 echo "  * HTTPS: https://$SERVER_IP:9443"
 echo "  * HTTP: http://$SERVER_IP:9000"
 echo "- Dominio configurado: $DOMAIN"
-echo "- Cloudflare Tunnel está ejecutándose y redirigiendo el tráfico"
 echo -e "\nRecuerde:"
-echo "1. Puede acceder a Portainer a través de su dominio Cloudflare configurado"
-echo "2. Al acceder por primera vez a Portainer, deberá crear una contraseña de administrador"
-echo "3. Los logs de Cloudflare Tunnel se pueden ver con: docker logs cloudflared"
-echo "4. Para verificar el estado del túnel: docker ps | grep cloudflared"
+echo "1. Al acceder por primera vez a Portainer, deberá crear una contraseña de administrador"
+echo "2. Para verificar el estado de los servicios use: docker ps"
 
-# Verificar si todos los servicios están funcionando
+# Verificar si Docker está funcionando
 if docker info >/dev/null 2>&1; then
     print_message "Docker está funcionando correctamente"
 else
     print_warning "Docker está instalado pero podría haber problemas. Verifique el estado con 'docker info'"
-fi
-
-if docker ps | grep -q cloudflared; then
-    print_message "Cloudflare Tunnel está funcionando correctamente"
-else
-    print_warning "Cloudflare Tunnel está instalado pero podría haber problemas. Verifique los logs con 'docker logs cloudflared'"
 fi
